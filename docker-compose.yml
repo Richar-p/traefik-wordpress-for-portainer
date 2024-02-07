@@ -1,0 +1,79 @@
+version: '3'
+
+# LISTE OF ENVS :
+# DOMAINE
+
+networks:
+  # enable connection with Traefik
+  traefik:
+    external: true
+  # network for the app
+  mysitebackend:
+
+services:
+
+  # The Wordpress CMS itself
+  mysitewordpress:
+    image: wordpress:latest
+    restart: always
+    logging:
+      # Configure the logs retention according to your needs
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # Connect WordPress to the database
+      WORDPRESS_DB_HOST: mysitedb:3306
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: password
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      # link the content of WordPress in a directory to enable local modifications
+      - wp_data:/var/www/html
+    networks:
+      - traefik
+      - mysitebackend
+    depends_on:
+      - mysitedb
+    labels:
+      # The labels are usefull for Traefik only
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Get the routes from http
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.rule=Host(`${DOMAINE}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.entrypoints=web"
+      # Redirect these routes to https
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}.middlewares=redirect-to-https@docker"
+      # Get the routes from https
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secured.rule=Host(`${DOMAINE}`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secured.entrypoints=websecure"
+      # Apply autentificiation with http challenge
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secured.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secured.tls.certresolver=leresolver"
+
+  # The MySQL database
+  mysitedb:
+    # this is the database used by Wordpress
+    image: mysql:5.7
+    restart: always
+    logging:
+      # Configure the logs retention according to your needs
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # Connect WordPrerss to the database
+      MYSQL_DATABASE: wordpress
+      MYSQL_ROOT_PASSWORD: password
+    volumes:
+      # Here, the database files are linked into a directory for direct access
+      # You probably prefer to use a docker volume instead
+      - db_data:/var/lib/mysql
+    networks:
+      - mysitebackend
+
+volumes:
+  db_data:
+  wp_data:
+    
